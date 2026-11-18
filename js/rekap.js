@@ -262,6 +262,38 @@
   // ---------- Modal ----------
   function findRow(id) { return state.rows.find((x) => x.id === id); }
 
+  // Menampilkan bukti login dari penyimpanan privat. Tautan dibuat ulang setiap detail dibuka.
+  async function loadBukti(root, x) {
+    const box = root.querySelector("#bukti-box");
+    if (!box) return;
+    if (!x.bukti_login_path) {
+      box.innerHTML = `<p class="muted" style="margin:0">Belum ada bukti login. Garansi tidak aktif sampai customer mengirim bukti.</p>`;
+      return;
+    }
+    box.innerHTML = `<p class="muted" style="margin:0">Memuat bukti login...</p>`;
+    const { data, error } = await sb().storage.from("bukti-login").createSignedUrl(x.bukti_login_path, 3600);
+    if (error || !data) {
+      box.innerHTML = `<p style="color:#c0546f;margin:0">Bukti login tidak bisa dimuat${error ? ": " + esc(error.message) : "."}</p>`;
+      return;
+    }
+    const ext = (x.bukti_login_path.split(".").pop() || "jpg");
+    box.innerHTML = `
+      <div><b>Bukti login</b></div>
+      <a href="${data.signedUrl}" target="_blank" rel="noopener">
+        <img src="${data.signedUrl}" alt="Bukti login" style="width:100%;border-radius:14px;display:block;margin-top:8px" />
+      </a>
+      <button class="chip" type="button" style="margin-top:8px">Unduh bukti</button>`;
+    box.querySelector("button").addEventListener("click", async () => {
+      const r = await fetch(data.signedUrl);
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bukti-login-${x.transaction_id}.${ext}`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    });
+  }
+
   function renderModal() {
     const root = state.container?.querySelector("#modal-root");
     if (!root) return;
@@ -295,12 +327,14 @@
             <div><span>Expired</span><b>${fmtDate(x.expired_date)} (${x.service_status === "Garansi" ? "Dalam garansi" : svcStatus(x.expired_date)})</b></div>
             <div><span>Pembayaran</span><b>${esc(x.payment_status)}</b></div>
             <div><span>Pengerjaan</span><b>${esc(x.work_status)}</b></div>
-            <div><span>Garansi</span><b>${x.garansi_aktif ? "Aktif (ada bukti login)" : "Tidak aktif"}</b></div>
+            <div><span>Garansi</span><b><span style="display:inline-block;padding:3px 12px;border-radius:999px;font-weight:700;background:${x.garansi_aktif ? "#cbe9c8" : "#f6d5de"};color:${x.garansi_aktif ? "#2f6f5e" : "#b4465f"}">${x.garansi_aktif ? "Aktif" : "Tidak aktif"}</span></b></div>
             <div style="grid-column:1/-1"><span>Catatan</span><b>${esc(x.note || "-")}</b></div>
           </div>
+          <div class="bukti-box" id="bukti-box" style="margin-top:14px;padding:12px;border-radius:18px;background:var(--cream);border:2px dashed #d3cbf3"></div>
           ${window.hazzeGaransi ? window.hazzeGaransi.sectionHtml(x) : ""}
           <div class="form-actions"><button class="btn btn-ghost" type="button" data-close>Tutup</button></div>
         </div></div>`;
+      loadBukti(root, x);
       return;
     }
 
